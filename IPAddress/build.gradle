@@ -1,0 +1,170 @@
+/*
+ * Copyright (c) 2017, Formation Data Systems, Inc. All Rights Reserved.
+ */
+
+group 'inet.ipaddr'
+version '2.0.1'
+
+task wrapper(type: Wrapper) {
+    gradleVersion = '3.3'
+}
+
+def isDevBuild
+def isReleaseBuild
+def isCiBuild
+
+if ( project.hasProperty( "release" ) )
+{
+    isReleaseBuild = true
+    println "Release Build for $project.name";
+}
+else if ( project.hasProperty( "ci" ) )
+{
+    isCiBuild = true
+    version += "-SNAPSHOT"
+    println "CI Build for $project.name";
+}
+else
+{
+    isDevBuild = true
+    version += "-SNAPSHOT"
+    println "Developer Build for $project.name";
+}
+
+
+apply plugin: 'idea'
+apply plugin: 'java'
+apply plugin: 'maven'
+apply plugin: 'maven-publish'
+
+sourceCompatibility = '1.8'
+targetCompatibility = '1.8'
+
+repositories {
+    mavenLocal( )
+    maven { url 'http://bld-artifactory.formationds.com:8081/artifactory/fds-maven-all-virtual' }
+    jcenter( )
+}
+
+compileJava {
+    options.encoding = "UTF-8"
+}
+
+ext {
+    orgId = 'inet.ipaddr'
+    orgName = 'Sean C Foley'
+    orgUrl = 'https://github.com/seancfoley/IPAddress'
+
+    sourceSets {
+        main {
+            java.srcDirs = ['src']
+        }
+    }
+
+    /*
+     * dependency versions
+     */
+}
+
+jar {
+    manifest {
+        attributes(
+                'Specification-Version': version,
+                'Specification-Vendor': orgName,
+                'Implementation-Title': project.name,
+                'Implementation-Version': version,
+                'Implementation-Vendor': orgName,
+                'Implementation-Vendor-Id': orgId,
+                'Implementation-Vendor-URL': orgUrl,
+                )
+        attributes "Built-By": System.getProperty( "user.name" )
+        attributes "Build-Jdk": System.getProperty( "java.version" )
+        [
+                "BUILD_ID": "Build-Id",
+                "GIT_COMMIT": "Git-Commit",
+                "GIT_BRANCH": "Git-Branch"
+        ].each { envVar, attrName ->
+            def envVal = System.getenv( envVar )
+            if ( envVal ) {
+                attributes( [ ( attrName ): envVal ] )
+            }
+        }
+    }
+}
+
+task sourcesJar(type: Jar, dependsOn: classes) {
+    version = version
+    classifier = 'sources'
+
+    from sourceSets.main.allSource
+}
+
+task javadocJar(type: Jar, dependsOn: javadoc) {
+    version = version
+    classifier = 'javadoc'
+
+    from javadoc.destinationDir
+}
+
+task testsJar(type: Jar, dependsOn: testClasses) {
+    classifier = 'tests'
+    from sourceSets.test.output
+}
+
+task resolveDependencies {
+    description = 'Forces the resolution of all dependencies in all configurations'
+    group = 'build'
+
+    doLast {
+        configurations.all { c ->
+            c.resolve( )
+        }
+    }
+}
+
+artifacts {
+    archives sourcesJar
+    archives javadocJar
+    archives testsJar
+}
+
+dependencies {
+}
+
+uploadArchives {
+    repositories {
+        if ( project.artifactoryUsername == "" )
+        {
+            mavenLocal()
+        }
+        else
+        {
+            mavenDeployer {
+
+                repository(url: artifactoryUrl) {
+                    authentication(userName: project.artifactoryUsername, password: project.artifactoryPassword)
+                }
+
+                pom.project {
+                    name rootProject.name
+                    packaging 'jar'
+                    description rootProject.description
+                    url 'https://github.com/FDS-Dev/ext-model.git'
+
+                    scm {
+                        url 'scm:git@github.com:FDS-Dev/ext-model.git'
+                        connection 'scm:git@github.com:FDS-Dev/ext-model.git'
+                        developerConnection 'scm:git@github.com:FDS-Dev/ext-model.git'
+                    }
+
+                    developers {
+                        developer {
+                            id 'tinius'
+                            name 'Paul E. Tinius'
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
